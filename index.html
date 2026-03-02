@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FoodGIS: Guia Alimentar Universitário</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg-sidebar: #ffffff;
+            --bg-body: #f1f5f9;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+        }
+
+        body { 
+            margin: 0; padding: 0; display: flex; height: 100vh; 
+            font-family: 'Poppins', sans-serif; background-color: var(--bg-body); color: var(--text-main);
+            overflow: hidden; 
+        }
+
+        #sidebar { 
+            width: 360px; background-color: var(--bg-sidebar); padding: 25px; 
+            box-shadow: 4px 0 20px rgba(0,0,0,0.05); z-index: 1000; 
+            display: flex; flex-direction: column; gap: 20px; overflow-y: auto;
+        }
+
+        #main-content { flex-grow: 1; position: relative; display: flex; flex-direction: column; }
+        #map { flex-grow: 1; z-index: 1; }
+
+        .header { text-align: center; padding-bottom: 15px; border-bottom: 2px solid var(--border-color); }
+        .header h2 { margin: 0; font-size: 1.4rem; color: #0f172a; font-weight: 600; }
+        .header p { margin: 5px 0 0; font-size: 0.85rem; color: var(--text-muted); }
+
+        .control-group { background: #f8fafc; padding: 18px; border-radius: 12px; border: 1px solid var(--border-color); }
+        .control-group label { display: block; font-size: 0.95rem; font-weight: 600; color: #334155; margin-bottom: 5px; }
+        .info { font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 12px; line-height: 1.4; }
+        
+        #statusLocalizacao { color: var(--primary); font-weight: 600; background: #eff6ff; padding: 8px; border-radius: 6px; border: 1px solid #bfdbfe; margin-bottom: 12px;}
+
+        .flex-row { display: flex; gap: 8px; align-items: stretch; margin-bottom: 12px; }
+        
+        select, input[type="file"] { 
+            width: 100%; padding: 10px 12px; margin-bottom: 12px; 
+            border: 1px solid #cbd5e1; border-radius: 8px; background-color: #fff; 
+            font-family: inherit; font-size: 0.9rem; color: var(--text-main); outline: none; transition: 0.2s; box-sizing: border-box;
+        }
+        .flex-row select { margin-bottom: 0; flex-grow: 1; }
+        select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+
+        .btn-secundario {
+            background: #e2e8f0; border: none; border-radius: 8px; padding: 0 15px;
+            cursor: pointer; transition: 0.2s; font-size: 1.2rem;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .btn-secundario:hover { background: #cbd5e1; transform: scale(1.05); }
+
+        input[type="file"]::file-selector-button {
+            background: #e2e8f0; border: none; padding: 8px 16px; 
+            border-radius: 6px; cursor: pointer; transition: 0.2s; 
+            font-family: inherit; font-weight: 600; color: #475569; margin-right: 10px;
+        }
+        input[type="file"]::file-selector-button:hover { background: #cbd5e1; color: #0f172a; }
+
+        #listaCamadas { display: flex; flex-direction: column; gap: 8px; }
+        .camada-item {
+            display: flex; align-items: center; justify-content: space-between;
+            background: #ffffff; border: 1px solid #cbd5e1; padding: 8px 12px;
+            border-radius: 8px; font-size: 0.85rem; font-weight: 500;
+        }
+        .camada-item-left { display: flex; align-items: center; gap: 8px; color: #0f172a; }
+        .camada-item-left input[type="checkbox"] { cursor: pointer; width: 16px; height: 16px; accent-color: var(--primary); }
+        .btn-delete {
+            background: #fee2e2; color: #ef4444; border: none; border-radius: 6px; 
+            padding: 6px 10px; cursor: pointer; font-size: 0.85rem; transition: 0.2s;
+        }
+        .btn-delete:hover { background: #fca5a5; color: #b91c1c; }
+
+        #loading { 
+            display: none; background: #fffbeb; color: #d97706; font-weight: 600; 
+            font-size: 0.85rem; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #fde68a; margin-top: 10px;
+        }
+
+        .leaflet-popup-content { font-family: 'Poppins', sans-serif; font-size: 0.9rem; }
+
+        #carousel-container {
+            position: absolute; bottom: 15px; left: 0; right: 0; z-index: 1000;
+            padding: 0 15px; pointer-events: none; 
+        }
+        #carousel {
+            display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px;
+            scroll-behavior: smooth; pointer-events: auto; padding-right: 20px; 
+        }
+        #carousel::-webkit-scrollbar { height: 6px; }
+        #carousel::-webkit-scrollbar-track { background: transparent; }
+        #carousel::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
+
+        .card {
+            flex: 0 0 auto; width: 200px; background: rgba(255, 255, 255, 0.95); 
+            border-radius: 10px; overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1); cursor: pointer; transition: transform 0.2s;
+            display: flex; flex-direction: column; border: 1px solid var(--border-color);
+            backdrop-filter: blur(4px);
+        }
+        .card:hover { transform: translateY(-4px); box-shadow: 0 6px 15px rgba(0,0,0,0.15); border-color: var(--primary); }
+        .card img { width: 100%; height: 90px; object-fit: cover; } 
+        .card-content { padding: 10px; }
+        .card-content h4 { margin: 0 0 3px; font-size: 0.9rem; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .card-content p { margin: 0; font-size: 0.75rem; color: var(--text-muted); }
+        .card-footer { margin-top: 8px; font-size: 0.7rem; font-weight: bold; color: var(--primary); }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <div class="header">
+            <h2>🍔 FoodGIS</h2>
+            <p>Guia Alimentar Universitário</p>
+        </div>
+        
+        <div class="control-group">
+            <label>Campus Foco</label>
+            <span class="info" id="statusLocalizacao">📍 Buscando campus mais próximo de você...</span>
+            
+            <div class="flex-row">
+                <select id="seletorUniversidade" onchange="mudarUniversidadeManualmente()">
+                    <option value="auto">📍 Automático (Meu GPS)</option>
+                    <option value="puc_coreu">🎓 PUC Minas (Coração Eucarístico)</option>
+                    <option value="ufmg_pamp">🎓 UFMG (Pampulha)</option>
+                </select>
+                <button class="btn-secundario" onclick="centralizarMapa()" title="Centralizar visualização no campus">🎯</button>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label>Filtro Básico (OpenStreetMap)</label>
+            <span class="info">Filtrando opções num raio de 800m do campus.</span>
+            
+            <select id="filtroTipo" onchange="aplicarFiltros()">
+                <option value="todos">🍕 Todas as Categorias</option>
+                <option value="restaurant">🍽️ Restaurantes (Prato Feito)</option>
+                <option value="fast_food">🍔 Lanchonetes / Fast Food</option>
+                <option value="cafe">☕ Cafeterias</option>
+                <option value="bar">🍻 Bares e Pubs</option>
+            </select>
+
+            <div id="loading">⏳ Sincronizando dados da região...</div>
+        </div>
+
+        <div class="control-group" style="flex-grow: 1; display: flex; flex-direction: column;">
+            <label>Análise Personalizada (Upload)</label>
+            <span class="info">Adicione dados como KML, Shapefile ou GeoJSON.</span>
+            <input type="file" id="uploadLayer" accept=".kml, .zip, .geojson, .json">
+            
+            <label style="margin-top: 10px;">Camadas Adicionadas:</label>
+            <div id="listaCamadas" style="overflow-y: auto; flex-grow: 1;">
+                <span class="info" style="font-size: 0.75rem; margin-top: 5px;">Nenhuma camada carregada ainda.</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-content">
+        <div id="map"></div>
+        <div id="carousel-container">
+            <div id="carousel"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-omnivore@0.3.4/leaflet-omnivore.min.js"></script>
+    <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+
+    <script>
+        const universidades = [
+            { id: "puc_coreu", nome: "PUC Minas (Coração Eucarístico)", lat: -19.9227, lon: -43.9925 },
+            { id: "ufmg_pamp", nome: "UFMG (Pampulha)", lat: -19.8691, lon: -43.9664 }
+        ];
+
+        let latAtual = universidades[0].lat;
+        let lonAtual = universidades[0].lon;
+        let dadosRestaurantesGlobais = []; 
+        let marcadoresNoMapa = {}; 
+        
+        // MUDANÇA: Agora camadas adicionais guardam os DADOS dos cards para podermos calcular a distância
+        let camadasAdicionais = {}; 
+
+        const map = L.map('map', { zoomControl: false }).setView([latAtual, lonAtual], 15);
+        L.control.zoom({ position: 'topleft' }).addTo(map);
+
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+        const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri' });
+
+        osm.addTo(map); 
+        L.control.layers({"Mapa de Ruas": osm, "Satélite": satelite}, null, { position: 'topright' }).addTo(map);
+        
+        const camadaRestaurantes = L.layerGroup().addTo(map);
+
+        const imagensCategoria = {
+            "restaurant": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=300&q=80",
+            "fast_food": "https://images.unsplash.com/photo-1550547660-d9450f859349?w=300&q=80",
+            "cafe": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=300&q=80",
+            "bar": "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=300&q=80",
+            "pub": "https://images.unsplash.com/photo-1572116469696-31de0f17ce0d?w=300&q=80",
+            "default": "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=300&q=80"
+        };
+        
+        function centralizarMapa() {
+            map.flyTo([latAtual, lonAtual], 16, { duration: 1.2 });
+        }
+
+        function mudarUniversidadeManualmente() {
+            const escolha = document.getElementById('seletorUniversidade').value;
+            const statusLabel = document.getElementById('statusLocalizacao');
+
+            if (escolha === 'auto') {
+                statusLabel.innerHTML = `📍 Buscando campus mais próximo de você...`;
+                map.locate({setView: false, maxZoom: 16}); 
+            } else {
+                const univEscolhida = universidades.find(u => u.id === escolha);
+                if (univEscolhida) {
+                    statusLabel.innerHTML = `📍 Foco manual travado em:<br><b>${univEscolhida.nome}</b>`;
+                    latAtual = univEscolhida.lat;
+                    lonAtual = univEscolhida.lon;
+                    centralizarMapa();
+                    buscarDadosOSM(latAtual, lonAtual);
+                }
+            }
+        }
+
+        map.locate({setView: false, maxZoom: 16});
+
+        map.on('locationfound', function(e) {
+            if (document.getElementById('seletorUniversidade').value !== 'auto') return;
+            const userLat = e.latlng.lat, userLon = e.latlng.lng;
+            
+            let univMaisProxima = universidades[0]; 
+            let menorDistancia = Infinity;
+
+            universidades.forEach(univ => {
+                const dist = map.distance([userLat, userLon], [univ.lat, univ.lon]); 
+                if (dist < menorDistancia) { menorDistancia = dist; univMaisProxima = univ; }
+            });
+
+            if (menorDistancia > 20000) {
+                univMaisProxima = universidades[0]; 
+                document.getElementById('statusLocalizacao').innerHTML = `📍 Longe dos campi. Mostrando padrão:<br><b>${univMaisProxima.nome}</b>`;
+            } else {
+                document.getElementById('statusLocalizacao').innerHTML = `📍 Mais próximo de você:<br><b>${univMaisProxima.nome}</b>`;
+            }
+
+            latAtual = univMaisProxima.lat; lonAtual = univMaisProxima.lon;
+            centralizarMapa();
+            buscarDadosOSM(latAtual, lonAtual);
+        });
+
+        map.on('locationerror', function(e) { 
+            if (document.getElementById('seletorUniversidade').value !== 'auto') return;
+            document.getElementById('statusLocalizacao').innerHTML = `📍 GPS inativo. Mostrando padrão:<br><b>PUC Minas (Coração Eucarístico)</b>`;
+            latAtual = universidades[0].lat; lonAtual = universidades[0].lon;
+            centralizarMapa();
+            buscarDadosOSM(latAtual, lonAtual);
+        });
+
+        async function buscarDadosOSM(lat, lon) {
+            document.getElementById('loading').style.display = 'block';
+            
+            const query = `
+                [out:json];
+                (
+                    node["amenity"~"restaurant|fast_food|cafe|bar|pub"](around:800,${lat},${lon});
+                    way["amenity"~"restaurant|fast_food|cafe|bar|pub"](around:800,${lat},${lon});
+                );
+                out center;
+            `;
+            const url = 'https://overpass-api.de/api/interpreter';
+
+            try {
+                const resposta = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(query) });
+                if (!resposta.ok) throw new Error(`Erro no servidor.`);
+                const dados = await resposta.json();
+
+                dadosRestaurantesGlobais = dados.elements.map((el, index) => {
+                    return { id: 'rest_' + index, lat: el.lat || el.center.lat, lon: el.lon || el.center.lon, nome: el.tags.name || "Estabelecimento Local", tipo: el.tags.amenity };
+                });
+
+                document.getElementById('loading').style.display = 'none';
+                aplicarFiltros(); 
+            } catch (erro) {
+                document.getElementById('loading').innerHTML = "Erro ao buscar dados.";
+            }
+        }
+
+        window.focarNoMapa = function(lat, lon, id) {
+            map.flyTo([lat, lon], 18, { duration: 1.2 });
+            setTimeout(() => { if(marcadoresNoMapa[id]) marcadoresNoMapa[id].openPopup(); }, 1200);
+        };
+
+        function aplicarFiltros() {
+            camadaRestaurantes.clearLayers(); 
+            Object.keys(marcadoresNoMapa).forEach(key => { if(key.startsWith('rest_')) delete marcadoresNoMapa[key]; });
+
+            const carousel = document.getElementById('carousel');
+            carousel.innerHTML = ''; 
+
+            const tipoSelecionado = document.getElementById('filtroTipo').value;
+            
+            // Array que vai guardar TODOS os cards para podermos ordená-los no final
+            let cardsParaRenderizar = [];
+
+            // 1. Processando dados do OpenStreetMap
+            const filtrados = dadosRestaurantesGlobais.filter(item => {
+                let tipoDoItem = item.tipo;
+                if(tipoDoItem === "pub" && tipoSelecionado === "bar") tipoDoItem = "bar";
+                return (tipoSelecionado === 'todos') || (tipoDoItem === tipoSelecionado);
+            });
+
+            filtrados.forEach(item => {
+                let tipoTraduzido = "Desconhecido";
+                if(item.tipo === "restaurant") tipoTraduzido = "🍽️ Restaurante";
+                if(item.tipo === "fast_food") tipoTraduzido = "🍔 Lanchonete";
+                if(item.tipo === "cafe") tipoTraduzido = "☕ Cafeteria";
+                if(item.tipo === "bar" || item.tipo === "pub") tipoTraduzido = "🍻 Bar / Pub";
+
+                const urlImagem = imagensCategoria[item.tipo] || imagensCategoria["default"];
+                const marcador = L.marker([item.lat, item.lon]);
+                marcador.bindPopup(`<b>${item.nome}</b><br>Categoria: ${tipoTraduzido}`);
+                camadaRestaurantes.addLayer(marcador);
+                marcadoresNoMapa[item.id] = marcador;
+
+                // Calcula a distância deste restaurante para o centro do Campus selecionado
+                const distancia = map.distance([latAtual, lonAtual], [item.lat, item.lon]);
+
+                const cardHTML = `<div class="card" onclick="focarNoMapa(${item.lat}, ${item.lon}, '${item.id}')"><img src="${urlImagem}" alt="${tipoTraduzido}"><div class="card-content"><h4>${item.nome}</h4><p>${tipoTraduzido}</p><div class="card-footer">📍 Ver no mapa</div></div></div>`;
+                
+                cardsParaRenderizar.push({ html: cardHTML, dist: distancia });
+            });
+
+            // 2. Processando dados dos Arquivos Customizados (Uploads)
+            Object.values(camadasAdicionais).forEach(camada => {
+                if (camada.visivel) {
+                    camada.cardsData.forEach(cData => {
+                        // Calcula a distância do ponto customizado para o centro do Campus
+                        const distancia = map.distance([latAtual, lonAtual], [cData.lat, cData.lon]);
+                        
+                        // MÁGICA AQUI: Só entra no carrossel se o arquivo upado for da mesma região (raio de 1.5km)
+                        if (distancia <= 1500) {
+                            const urlImagem = "https://images.unsplash.com/photo-1524661135-423995f22d0b?w=300&q=80"; 
+                            const cardHTML = `<div class="card" onclick="focarNoMapa(${cData.lat}, ${cData.lon}, '${cData.markerId}')"><img src="${urlImagem}" alt="Upload"><div class="card-content"><h4>${cData.nomeProp}</h4><p>📂 ${cData.nomeCamada}</p><div class="card-footer" style="color: ${cData.corTema}">📍 Ver no mapa</div></div></div>`;
+                            
+                            cardsParaRenderizar.push({ html: cardHTML, dist: distancia });
+                        }
+                    });
+                }
+            });
+
+            // Se nada passou no filtro (nem OSM nem arquivos na região)
+            if(cardsParaRenderizar.length === 0) {
+                carousel.innerHTML = '<div style="background: rgba(255,255,255,0.9); padding: 10px 20px; border-radius: 8px; font-size: 0.85rem;">Nenhum local da categoria na região do campus.</div>';
+                return;
+            }
+
+            // ORDENAÇÃO: Coloca os cards ordenados pela distância (do mais perto pro mais longe)
+            cardsParaRenderizar.sort((a, b) => a.dist - b.dist);
+
+            // Joga no carrossel na ordem certa
+            cardsParaRenderizar.forEach(card => {
+                carousel.insertAdjacentHTML('beforeend', card.html);
+            });
+        }
+
+        function renderizarListaCamadas() {
+            const container = document.getElementById('listaCamadas');
+            container.innerHTML = '';
+            const chaves = Object.keys(camadasAdicionais);
+            
+            if(chaves.length === 0) {
+                container.innerHTML = '<span class="info" style="font-size: 0.75rem; margin-top: 5px;">Nenhuma camada carregada ainda.</span>';
+                return;
+            }
+
+            chaves.forEach(id => {
+                const camada = camadasAdicionais[id];
+                const div = document.createElement('div');
+                div.className = 'camada-item';
+                div.innerHTML = `
+                    <div class="camada-item-left">
+                        <input type="checkbox" ${camada.visivel ? 'checked' : ''} onchange="toggleCamada('${id}', this.checked)">
+                        <span title="${camada.nome}">${camada.nome.length > 22 ? camada.nome.substring(0, 20) + '...' : camada.nome}</span>
+                    </div>
+                    <button class="btn-delete" onclick="removerCamada('${id}')" title="Excluir arquivo">🗑️ Remover</button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        window.toggleCamada = function(id, checked) {
+            camadasAdicionais[id].visivel = checked;
+            if(checked) { camadasAdicionais[id].layer.addTo(map); } 
+            else { map.removeLayer(camadasAdicionais[id].layer); }
+            aplicarFiltros(); 
+        };
+
+        window.removerCamada = function(id) {
+            map.removeLayer(camadasAdicionais[id].layer); 
+            camadasAdicionais[id].markerIds.forEach(mId => delete marcadoresNoMapa[mId]); 
+            delete camadasAdicionais[id]; 
+            
+            document.getElementById('uploadLayer').value = ""; 
+            renderizarListaCamadas();
+            aplicarFiltros();
+        };
+
+        function processarFeatureCustomizada(feature, layer, nomeCamada, corTema, idCamada) {
+            let nomeProp = "Local Marcado";
+            if (feature.properties) {
+                nomeProp = feature.properties.nome || feature.properties.name || feature.properties.title || `Ponto (${nomeCamada})`;
+            }
+
+            layer.bindPopup(`<b>${nomeProp}</b><br>Camada: ${nomeCamada}`);
+
+            let lat, lon;
+            if (feature.geometry && feature.geometry.type === 'Point') {
+                lat = feature.geometry.coordinates[1]; lon = feature.geometry.coordinates[0];
+            } else if (layer.getBounds) {
+                const center = layer.getBounds().getCenter(); lat = center.lat; lon = center.lng;
+            }
+
+            if (lat && lon) {
+                const markerId = 'custom_' + Math.random().toString(36).substr(2, 9);
+                marcadoresNoMapa[markerId] = layer; 
+                
+                if(camadasAdicionais[idCamada]) {
+                    camadasAdicionais[idCamada].markerIds.push(markerId);
+                    // Armazena os dados puros, não o HTML, para conseguirmos calcular a distância depois
+                    camadasAdicionais[idCamada].cardsData.push({
+                        lat: lat, lon: lon, markerId: markerId, nomeProp: nomeProp, nomeCamada: nomeCamada, corTema: corTema
+                    });
+                }
+            }
+        }
+
+        document.getElementById('uploadLayer').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            const fileName = file.name.toLowerCase();
+            const nomeCamada = file.name.split('.')[0]; 
+            const layerId = 'camada_' + Date.now(); 
+
+            camadasAdicionais[layerId] = { id: layerId, nome: nomeCamada, layer: null, visivel: true, cardsData: [], markerIds: [] };
+
+            if (fileName.endsWith('.zip')) {
+                reader.onload = function(evento) {
+                    shp(evento.target.result).then(function(geojson) {
+                        const novaCamada = L.geoJSON(geojson, { 
+                            style: { color: "#e11d48", weight: 3 },
+                            onEachFeature: function(feature, layer) { processarFeatureCustomizada(feature, layer, nomeCamada, "#e11d48", layerId); }
+                        }).addTo(map);
+                        map.fitBounds(novaCamada.getBounds());
+                        camadasAdicionais[layerId].layer = novaCamada;
+                        renderizarListaCamadas();
+                        aplicarFiltros();
+                    }).catch(function(erro) { alert("Erro ao ler Shapefile."); delete camadasAdicionais[layerId]; });
+                };
+                reader.readAsArrayBuffer(file);
+            } 
+            else if (fileName.endsWith('.geojson') || fileName.endsWith('.json')) {
+                reader.onload = function(evento) {
+                    try {
+                        const geojson = JSON.parse(evento.target.result);
+                        const novaCamada = L.geoJSON(geojson, { 
+                            style: { color: "#10b981", weight: 3 },
+                            onEachFeature: function(feature, layer) { processarFeatureCustomizada(feature, layer, nomeCamada, "#10b981", layerId); }
+                        }).addTo(map);
+                        map.fitBounds(novaCamada.getBounds());
+                        camadasAdicionais[layerId].layer = novaCamada;
+                        renderizarListaCamadas();
+                        aplicarFiltros();
+                    } catch(erro) { alert("Erro ao ler GeoJSON."); delete camadasAdicionais[layerId]; }
+                };
+                reader.readAsText(file);
+            }
+            else if (fileName.endsWith('.kml')) {
+                reader.onload = function(evento) {
+                    const customLayer = L.geoJson(null, { 
+                        style: { color: "#8b5cf6", weight: 3 },
+                        onEachFeature: function(feature, layer) { processarFeatureCustomizada(feature, layer, nomeCamada, "#8b5cf6", layerId); }
+                    });
+                    const kmlLayer = omnivore.kml.parse(evento.target.result, null, customLayer).addTo(map);
+                    setTimeout(() => {
+                        map.fitBounds(kmlLayer.getBounds());
+                        camadasAdicionais[layerId].layer = kmlLayer;
+                        renderizarListaCamadas();
+                        aplicarFiltros();
+                    }, 500);
+                };
+                reader.readAsText(file);
+            }
+        });
+    </script>
+</body>
+</html>
